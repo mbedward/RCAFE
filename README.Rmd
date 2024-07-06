@@ -1,0 +1,114 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+
+# RCAFE
+
+<!-- badges: start -->
+<!-- badges: end -->
+
+An R package to (possibly) resurrect (some of) the CAFE (Cellular Analysis of Fire and Extinction) simulation model that was used for a series of studies by Ross Bradstock and colleagues in the 1990s, investigating plant population dynamics in relation to various wildfire regimes.
+
+## Installation
+
+You can install the development version of RCAFE from [GitHub](https://github.com/) with:
+
+``` r
+# install.packages("devtools")
+devtools::install_github("mbedward/RCAFE")
+```
+
+## Examples
+
+```{r example}
+library(RCAFE)
+library(terra)
+library(progress)
+
+# Create a matrix of random time since fire values (implicitly treated as years).
+# The matrix dimensions will also define the simulation landscape.
+sidelen <- 200
+MinTSF <- 0
+MaxTSF <- 10
+
+tsf <- matrix(as.integer(sample(MinTSF:MaxTSF, size = sidelen*sidelen, replace = TRUE)), 
+              sidelen, sidelen)
+
+plot(rast(tsf))
+
+# A function to relate the probability of fire in a cell to the
+# time since fire
+fn_prob <- function(tsf) {
+  1 / (1 + exp(2.5 - 0.37*tsf))
+}
+
+curve(fn_prob(x), from = 0, to = 40, ylim = c(0, 1), 
+      xlab = "Time since fire", ylab = "Probability of cell ignition")
+
+
+# Simulate fires for an intial period to evolve spatial structure in the 
+# pattern of time since fire
+Nburn_in <- 400
+pb <- progress_bar$new(total = Nburn_in)
+
+for (i in 1:Nburn_in) {
+  pb$tick()
+
+  res <- RCAFE:::doFire(tsf, fn_prob)
+
+  # Update the TSF matrix based on the fire map returned by
+  # the doFire function
+  tsf <- tsf + 1
+  tsf[res$landscape > 0] <- 0  # Burnt cells
+}
+
+# View the resulting TSF pattern
+plot(rast(tsf))
+
+# Simulate a few more fires and plot them to get some idea of
+# the general patterns. We will only plot fires that burnt at least
+# 5% of the landscape.
+min_landscape_prop <- 0.05
+
+rr <- lapply(1:16, function(...) {
+  tsfx <- tsf
+  while (TRUE) {
+    res <- RCAFE:::doFire(tsf = tsfx, fn_prob)
+
+    tsfx <- tsfx + 1
+    tsfx[res$landscape > 0] <- 0
+
+    if (res$ncells > sidelen*sidelen*min_landscape_prop) break
+  }
+  rast(res$landscape)
+})
+
+rr <- rast(rr)
+plot(rr, legend = FALSE, main = "")
+
+
+# Run the simulation function for a set of 100 year batches and view the
+# time since fire pattern at the end of each batch
+rr <- lapply(1:16, function(i) {
+  tsf <<- RCAFE:::cafeSim(initial_tsf = tsf, n_times = 100, fn_prob_tsf = fn_prob)
+  rast(tsf)
+})
+
+rr <- rast(rr)
+names(rr) <- sprintf("%d years", seq_len(16) * 100)
+plot(rr)
+
+```
+
+
