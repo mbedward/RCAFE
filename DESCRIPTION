@@ -1,0 +1,17 @@
+Package: RCAFE
+Type: Package
+Title: CAFE: Cellular Analysis of Fire and Extinction
+Version: 0.1.0
+Date: 2024-07-06
+Authors@R: c(
+  person("Michael", "Bedward", role = c("aut", "cre"), email = "michael.bedward@gmail.com"),
+  person("Ross", "Bradstock", role = "aut", email = "rbradstock@uow.edu.au")
+  )
+Description: Trying to get CAFE working in R!
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.1
+LinkingTo: Rcpp
+Depends: R (>= 4.0.0)
+Imports: Rcpp
+License: MIT + file LICENSE
