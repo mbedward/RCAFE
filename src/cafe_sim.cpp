@@ -10,19 +10,23 @@ int wrap_coord(int x, int n) {
   return x;
 }
 
-int index_to_row(int index, int n_cols) {
-  return index / n_cols;
+// Convert cell index to row position assuming column-major order
+int index_to_row(int index, int n_rows) {
+  return index % n_rows;
 }
 
-int index_to_col(int index, int n_cols) {
-  return index % n_cols;
+// Convert cell index to column position assuming column-major order of elements
+int index_to_col(int index, int n_rows) {
+  return index / n_rows;
 }
 
-int rowcol_to_index(int r, int c, int n_cols) {
-  return r * n_cols + c;
+// Convert row,col position to cell index assuming column-major order of elements
+int rowcol_to_index(int r, int c, int n_rows) {
+  return c * n_rows + r;
 }
 
 // Get the orthogonal neighbour indices for a cell identified by row,col
+// (assuming column-major order of elements)
 std::vector<int> get_rowcol_neighbour_indices(const int r, const int c, const int n_rows, const int n_cols, const bool wrap) {
   std::vector<int> nbrs;
 
@@ -33,28 +37,28 @@ std::vector<int> get_rowcol_neighbour_indices(const int r, const int c, const in
   if (rnbr < 0 && wrap) {
     rnbr = wrap_coord(rnbr, n_rows);
   }
-  if (rnbr >= 0) nbrs.push_back( rowcol_to_index(rnbr, c, n_cols));
+  if (rnbr >= 0) nbrs.push_back( rowcol_to_index(rnbr, c, n_rows));
 
   // south
   rnbr = r + 1;
   if (rnbr >= n_rows && wrap) {
     rnbr = wrap_coord(rnbr, n_rows);
   }
-  if (rnbr < n_rows) nbrs.push_back( rowcol_to_index(rnbr, c, n_cols));
+  if (rnbr < n_rows) nbrs.push_back( rowcol_to_index(rnbr, c, n_rows));
 
   // east
   cnbr = c + 1;
   if (cnbr >= n_cols && wrap) {
     cnbr = wrap_coord(cnbr, n_cols);
   }
-  if (cnbr < n_cols) nbrs.push_back( rowcol_to_index(r, cnbr, n_cols));
+  if (cnbr < n_cols) nbrs.push_back( rowcol_to_index(r, cnbr, n_rows));
 
   // west
   cnbr = c - 1;
   if (cnbr < 0 && wrap) {
     cnbr = wrap_coord(cnbr, n_cols);
   }
-  if (cnbr >= 0) nbrs.push_back( rowcol_to_index(r, cnbr, n_cols) );
+  if (cnbr >= 0) nbrs.push_back( rowcol_to_index(r, cnbr, n_rows) );
 
   return nbrs;
 }
@@ -62,8 +66,8 @@ std::vector<int> get_rowcol_neighbour_indices(const int r, const int c, const in
 
 // Get the orthogonal neighbour indices for a cell specified by its index
 std::vector<int> get_neighbour_indices(const int index, const int n_rows, const int n_cols, const bool wrap) {
-  int r = index_to_row(index, n_cols);
-  int c = index_to_col(index, n_cols);
+  int r = index_to_row(index, n_rows);
+  int c = index_to_col(index, n_rows);
   return get_rowcol_neighbour_indices(r, c, n_rows, n_cols, wrap);
 }
 
