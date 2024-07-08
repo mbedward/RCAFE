@@ -22,6 +22,10 @@ You can install the development version of RCAFE from
 devtools::install_github("mbedward/RCAFE")
 ```
 
+To install on a Windows system you will need to have
+[Rtools](https://cran.r-project.org/bin/windows/Rtools/) installed to
+build the C++ functions in the package.
+
 ## Examples
 
 ``` r
@@ -63,6 +67,7 @@ curve(fn_prob(x), from = 0, to = 40, ylim = c(0, 1),
 
 ``` r
 
+
 # Simulate fires for an intial period to evolve spatial structure in the 
 # pattern of time since fire
 Nburn_in <- 400
@@ -98,7 +103,8 @@ plot(rast(tsf))
 # 5% of the landscape.
 min_landscape_prop <- 0.05
 
-rr <- lapply(1:16, function(...) {
+Nfires <- 6
+rr <- lapply(1:Nfires, function(...) {
   tsfx <- tsf
   while (TRUE) {
     res <- RCAFE:::doFire(tsf = tsfx, fn_prob)
@@ -120,15 +126,19 @@ plot(rr, legend = FALSE, main = "")
 ``` r
 
 
-# Run the simulation function for a set of 100 year batches and view the
+# Run the simulation function for a set of 50 year batches and view the
 # time since fire pattern at the end of each batch
-rr <- lapply(1:16, function(i) {
-  tsf <<- RCAFE:::cafeSim(initial_tsf = tsf, n_times = 100, fn_prob_tsf = fn_prob)
+#
+Nbatches <- 6
+Nyears <- 50
+
+rr <- lapply(1:Nbatches, function(i) {
+  tsf <<- RCAFE:::cafeSim(initial_tsf = tsf, n_times = Nyears, fn_prob_tsf = fn_prob)
   rast(tsf)
 })
 
 rr <- rast(rr)
-names(rr) <- sprintf("%d years", seq_len(16) * 100)
+names(rr) <- sprintf("%d years", seq_len(Nbatches) * Nyears)
 plot(rr)
 ```
 

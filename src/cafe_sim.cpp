@@ -252,9 +252,11 @@ IntegerMatrix cafeSim(const IntegerMatrix initial_tsf,
   int last_progress_time = 0;
 
   for (int itime = 0; itime < n_times; itime++) {
-    if (itime - last_progress_time > progress_time_step) {
-      last_progress_time = itime;
-      printf("=");
+    if (display_progress) {
+      if (itime - last_progress_time > progress_time_step) {
+        last_progress_time = itime;
+        printf("=");
+      }
     }
 
     List fire_results = doFire(tsf, fn_prob_tsf, diagonal, max_ignition_attempts);
@@ -267,7 +269,7 @@ IntegerMatrix cafeSim(const IntegerMatrix initial_tsf,
     }
   }
 
-  printf("\n");
+  if (display_progress) printf("\n");
 
   return tsf;
 }
