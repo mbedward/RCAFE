@@ -4,6 +4,7 @@
 using namespace Rcpp;
 using namespace std;
 
+
 int wrap_coord(int x, int n) {
   while (x < 0) x = x + n;
   while (x >= n) x = x - n;
@@ -25,50 +26,114 @@ int rowcol_to_index(int r, int c, int n_rows) {
   return c * n_rows + r;
 }
 
-// Get the orthogonal neighbour indices for a cell identified by row,col
-// (assuming column-major order of elements)
-std::vector<int> get_rowcol_neighbour_indices(const int r, const int c, const int n_rows, const int n_cols, const bool wrap) {
+// Get the neighbour indices for a cell identified by row,col (assuming
+// column-major order of elements). If diagonal is false the neighbourhood is
+// the four nearest orthogonal cells; if true it is the eight nearest cells.
+//
+std::vector<int> get_rowcol_neighbour_indices(const int r, const int c,
+                                              const int n_rows, const int n_cols,
+                                              const bool diagonal = false,
+                                              const bool wrap = false) {
   std::vector<int> nbrs;
 
   int rnbr, cnbr;
 
   // north
   rnbr = r - 1;
-  if (rnbr < 0 && wrap) {
+  if (wrap && rnbr < 0) {
     rnbr = wrap_coord(rnbr, n_rows);
   }
   if (rnbr >= 0) nbrs.push_back( rowcol_to_index(rnbr, c, n_rows));
 
+  // north-east
+  if (diagonal) {
+    rnbr = r - 1;
+    cnbr = c + 1;
+
+    if (wrap) {
+      if (rnbr < 0) rnbr = wrap_coord(rnbr, n_rows);
+      if (cnbr >= n_cols) cnbr = wrap_coord(cnbr, n_cols);
+    }
+
+    if (rnbr >= 0 && cnbr < n_cols) nbrs.push_back( rowcol_to_index(rnbr, cnbr, n_rows));
+  }
+
+  // east
+  cnbr = c + 1;
+  if (wrap && cnbr >= n_cols) {
+    cnbr = wrap_coord(cnbr, n_cols);
+  }
+
+  if (cnbr < n_cols) nbrs.push_back( rowcol_to_index(r, cnbr, n_rows));
+
+  // south-east
+  if (diagonal) {
+    rnbr = r + 1;
+    cnbr = c + 1;
+
+    if (wrap) {
+      if (rnbr >= n_rows) rnbr = wrap_coord(rnbr, n_rows);
+      if (cnbr >= n_cols) cnbr = wrap_coord(cnbr, n_cols);
+    }
+
+    if (rnbr < n_rows && cnbr < n_cols) nbrs.push_back( rowcol_to_index(rnbr, cnbr, n_rows));
+  }
+
   // south
   rnbr = r + 1;
-  if (rnbr >= n_rows && wrap) {
+  if (wrap && rnbr >= n_rows) {
     rnbr = wrap_coord(rnbr, n_rows);
   }
   if (rnbr < n_rows) nbrs.push_back( rowcol_to_index(rnbr, c, n_rows));
 
-  // east
-  cnbr = c + 1;
-  if (cnbr >= n_cols && wrap) {
-    cnbr = wrap_coord(cnbr, n_cols);
+  // south-west
+  if (diagonal) {
+    rnbr = r + 1;
+    cnbr = c - 1;
+
+    if (wrap) {
+      if (rnbr >= n_rows) rnbr = wrap_coord(rnbr, n_rows);
+      if (cnbr < 0) cnbr = wrap_coord(cnbr, n_cols);
+    }
+
+    if (rnbr < n_rows && cnbr >= 0) nbrs.push_back( rowcol_to_index(rnbr, cnbr, n_rows));
   }
-  if (cnbr < n_cols) nbrs.push_back( rowcol_to_index(r, cnbr, n_rows));
 
   // west
   cnbr = c - 1;
-  if (cnbr < 0 && wrap) {
+  if (wrap && cnbr < 0) {
     cnbr = wrap_coord(cnbr, n_cols);
   }
   if (cnbr >= 0) nbrs.push_back( rowcol_to_index(r, cnbr, n_rows) );
+
+  // north-west
+  if (diagonal) {
+    rnbr = r - 1;
+    cnbr = c - 1;
+
+    if (wrap) {
+      if (rnbr < 0) rnbr = wrap_coord(rnbr, n_rows);
+      if (cnbr < 0) cnbr = wrap_coord(cnbr, n_cols);
+    }
+
+    if (rnbr >= 0 && cnbr >= 0) nbrs.push_back( rowcol_to_index(rnbr, cnbr, n_rows));
+  }
 
   return nbrs;
 }
 
 
-// Get the orthogonal neighbour indices for a cell specified by its index
-std::vector<int> get_neighbour_indices(const int index, const int n_rows, const int n_cols, const bool wrap) {
+// Get the neighbour indices for a cell identified by its index (assuming
+// column-major order of elements). If diagonal is false the neighbourhood is
+// the four nearest orthogonal cells; if true it is the eight nearest cells.
+//
+std::vector<int> get_neighbour_indices(const int index,
+                                       const int n_rows, const int n_cols,
+                                       const bool diagonal = false,
+                                       const bool wrap = false) {
   int r = index_to_row(index, n_rows);
   int c = index_to_col(index, n_rows);
-  return get_rowcol_neighbour_indices(r, c, n_rows, n_cols, wrap);
+  return get_rowcol_neighbour_indices(r, c, n_rows, n_cols, diagonal, wrap);
 }
 
 
@@ -95,7 +160,11 @@ IntegerVector TESTER(int n) {
 //
 //' @export
 // [[Rcpp::export]]
-List doFire(const IntegerMatrix& tsf, Function fn_prob_tsf, const int max_ignition_attempts = 10) {
+List doFire(const IntegerMatrix& tsf,
+            const Function fn_prob_tsf,
+            const bool diagonal = false,
+            const int max_ignition_attempts = 10) {
+
   // Constants for cell state
   const int UNBURNT = 0;
   const int BURNING = 1;
@@ -129,7 +198,7 @@ List doFire(const IntegerMatrix& tsf, Function fn_prob_tsf, const int max_igniti
     std::set<int> spreadcells;
     std::set<int>::iterator it_spread;
 
-    std::vector<int> nbrs = get_neighbour_indices(ignition_index, n_rows, n_cols, false);
+    std::vector<int> nbrs = get_neighbour_indices(ignition_index, n_rows, n_cols, diagonal, false);
 
     for (std::vector<int>::iterator itnbr = nbrs.begin(); itnbr != nbrs.end(); ++itnbr) {
       spreadcells.insert(*itnbr);
@@ -153,7 +222,7 @@ List doFire(const IntegerMatrix& tsf, Function fn_prob_tsf, const int max_igniti
         landscape[spread_index] = BURNING;
         n_cells_burnt++ ;
 
-        std::vector<int> nbrs = get_neighbour_indices(spread_index, n_rows, n_cols, false);
+        std::vector<int> nbrs = get_neighbour_indices(spread_index, n_rows, n_cols, diagonal, false);
 
         for (std::vector<int>::iterator itnbr = nbrs.begin(); itnbr != nbrs.end(); ++itnbr) {
           if (landscape[*itnbr] == UNBURNT) spreadcells.insert(*itnbr);
@@ -167,12 +236,15 @@ List doFire(const IntegerMatrix& tsf, Function fn_prob_tsf, const int max_igniti
                       Named("ignition_index") = ignition_index);
 }
 
+
 //' @export
 // [[Rcpp::export]]
-IntegerMatrix cafeSim(IntegerMatrix initial_tsf,
-                      int n_times,
-                      Function fn_prob_tsf,
-                      bool display_progress = true) {
+IntegerMatrix cafeSim(const IntegerMatrix initial_tsf,
+                      const int n_times,
+                      const Function fn_prob_tsf,
+                      const bool diagonal = false,
+                      const int max_ignition_attempts = 10,
+                      const bool display_progress = true) {
 
   IntegerMatrix tsf = clone(initial_tsf);
 
@@ -185,7 +257,7 @@ IntegerMatrix cafeSim(IntegerMatrix initial_tsf,
       printf("=");
     }
 
-    List fire_results = doFire(tsf, fn_prob_tsf);
+    List fire_results = doFire(tsf, fn_prob_tsf, diagonal, max_ignition_attempts);
     IntegerMatrix landscape = fire_results["landscape"];
 
     // Update TSF for burnt and unburnt cells

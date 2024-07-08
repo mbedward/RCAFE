@@ -6,12 +6,12 @@ TESTER <- function(n) {
 }
 
 #' @export
-doFire <- function(tsf, fn_prob_tsf, max_ignition_attempts = 10L) {
-    .Call(`_RCAFE_doFire`, tsf, fn_prob_tsf, max_ignition_attempts)
+doFire <- function(tsf, fn_prob_tsf, diagonal = FALSE, max_ignition_attempts = 10L) {
+    .Call(`_RCAFE_doFire`, tsf, fn_prob_tsf, diagonal, max_ignition_attempts)
 }
 
 #' @export
-cafeSim <- function(initial_tsf, n_times, fn_prob_tsf, display_progress = TRUE) {
-    .Call(`_RCAFE_cafeSim`, initial_tsf, n_times, fn_prob_tsf, display_progress)
+cafeSim <- function(initial_tsf, n_times, fn_prob_tsf, diagonal = FALSE, max_ignition_attempts = 10L, display_progress = TRUE) {
+    .Call(`_RCAFE_cafeSim`, initial_tsf, n_times, fn_prob_tsf, diagonal, max_ignition_attempts, display_progress)
 }
 
