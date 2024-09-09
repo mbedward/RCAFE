@@ -8,7 +8,8 @@ rcafe_simulate(
   DB_path,
   tsf_init,
   regimes,
-  n_sim,
+  n_rep = 1,
+  n_iter = 100,
   n_burnin = 0,
   tsf_breaks = c(5, 10, 20),
   tsf_map_times = NULL,
@@ -27,12 +28,14 @@ the simulation landscape. Values should be non-negative integers.}
 \item{regimes}{A list of one or definitions for wildfire and/or prescribed
 fire regime(s).}
 
-\item{n_sim}{(positive integer) Maximum number of time steps for the
-simulation.}
+\item{n_rep}{(positive integer; default 1) Number of replicate simulations.}
 
-\item{n_burnin}{(non-negative integer; default 0) Number of initial time steps to
-run the simulation for prior to the \code{n_sim} times. No data are
-recorded for these initial time steps. This can be useful to evolve an
+\item{n_iter}{(positive integer; default 100) Number of iterations (time
+steps) per simulation.}
+
+\item{n_burnin}{(non-negative integer; default 0) Number of initial time
+steps to run the simulation for prior to the \code{n_iter} times. No data
+are recorded for these initial time steps. This can be useful to evolve an
 initial, spatially-structured pattern of time since fire (see examples).}
 
 \item{tsf_breaks}{An integer vector specifying the breakpoints over which to
@@ -45,7 +48,7 @@ years.}
 \item{tsf_map_times}{An integer vector specifying the times at which to record
 a map of time since fire. Maps will only be recorded after any burn-in time
 steps (argument \code{n_burnin}) have been completed. For example, the
-arguments \code{n_sim=500, n_burnin=100, tsf_map_times = c(1, seq(100, 500,
+arguments \code{n_iter=500, n_burnin=100, tsf_map_times = c(1, seq(100, 500,
 50))} specify to run 100 burn-in simulations to evolve a time since fire
 pattern in the landscape, and then record a map in the first year and every
 hundred years of the simulation period. If this vector is missing,
@@ -79,7 +82,7 @@ tsf0 <- matrix(20, nrow=100, ncol=100)
 
 # Run the simulation for 500 years after an initial 100 year
 # burn-in period
-res <- rcafe_simulate(tsf0, n_sim=500, n_burnin=100,
+res <- rcafe_simulate(tsf0, n_iter=500, n_burnin=100,
                       fn_prob_tsf = fn_prob)
 }
 

@@ -10,6 +10,7 @@ make_regime_wildfire <- function(name, fn_prob_tsf, fn_occur, diagonal = FALSE, 
 
   regime <- c(regime, list(diagonal = diagonal, max_ignition_attempts = max_ignition_attempts))
 
+  class(regime) <- "CAFEregime"
   regime
 }
 
@@ -25,6 +26,7 @@ make_regime_prescribed <- function(name, fn_prob_tsf, fn_occur, prop_landscape) 
 
   regime <- c(regime, list(prop_landscape = prop_landscape))
 
+  class(regime) <- "CAFEregime"
   regime
 }
 
@@ -59,9 +61,23 @@ make_regime_prescribed <- function(name, fn_prob_tsf, fn_occur, prop_landscape) 
     stop(msg)
   }
 
-  list(regime_type = regime_type,
-       name = name,
-       fn_prob_tsf = fn_prob_tsf,
-       fn_occur = fn_occur)
+  regime <- list(regime_type = regime_type,
+                 name = name,
+                 fn_prob_tsf = fn_prob_tsf,
+                 fn_occur = fn_occur)
+
+  regime
+}
+
+
+#' @export
+print.CAFEregime <- function(x, ...) {
+  if (x$regime_type == .REGIME_TYPE_WILDFIRE) {
+    rtype <- "wildfire"
+  } else {
+    rtype <- "prescribed fire"
+  }
+
+  glue::glue("CAFE {rtype} regime: {x$name}")
 }
 
