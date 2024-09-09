@@ -13,7 +13,7 @@ rcafe_simulate(
   n_burnin = 0,
   tsf_breaks = c(5, 10, 20),
   tsf_map_times = NULL,
-  map_fire_types = "none",
+  map_fire_types = c("none", "all", "wild", "prescribed"),
   display_progress = TRUE
 )
 }
@@ -45,10 +45,11 @@ intervals at each time step (year). For example, the default value of
 in the intervals 0-5 years;  6-10 years; 10-20 years; and greater than 20
 years.}
 
-\item{tsf_map_times}{An integer vector specifying the times at which to record
-a map of time since fire. Maps will only be recorded after any burn-in time
-steps (argument \code{n_burnin}) have been completed. For example, the
-arguments \code{n_iter=500, n_burnin=100, tsf_map_times = c(1, seq(100, 500,
+\item{tsf_map_times}{\strong{Not implemented yet}. An integer vector
+specifying the times at which to record a map of time since fire. Maps will
+only be recorded after any burn-in time steps (argument \code{n_burnin})
+have been completed. For example, the arguments
+\code{n_iter=500, n_burnin=100, tsf_map_times = c(1, seq(100, 500,
 50))} specify to run 100 burn-in simulations to evolve a time since fire
 pattern in the landscape, and then record a map in the first year and every
 hundred years of the simulation period. If this vector is missing,

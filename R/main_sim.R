@@ -27,10 +27,11 @@
 #'   in the intervals 0-5 years;  6-10 years; 10-20 years; and greater than 20
 #'   years.
 #'
-#' @param tsf_map_times An integer vector specifying the times at which to record
-#'   a map of time since fire. Maps will only be recorded after any burn-in time
-#'   steps (argument \code{n_burnin}) have been completed. For example, the
-#'   arguments \code{n_iter=500, n_burnin=100, tsf_map_times = c(1, seq(100, 500,
+#' @param tsf_map_times \strong{Not implemented yet}. An integer vector
+#'   specifying the times at which to record a map of time since fire. Maps will
+#'   only be recorded after any burn-in time steps (argument \code{n_burnin})
+#'   have been completed. For example, the arguments
+#'   \code{n_iter=500, n_burnin=100, tsf_map_times = c(1, seq(100, 500,
 #'   50))} specify to run 100 burn-in simulations to evolve a time since fire
 #'   pattern in the landscape, and then record a map in the first year and every
 #'   hundred years of the simulation period. If this vector is missing,
@@ -75,10 +76,12 @@ rcafe_simulate <- function(DB_path,
                            n_burnin = 0,
                            tsf_breaks = c(5, 10, 20),
                            tsf_map_times = NULL,
-                           map_fire_types = 'none',
+                           map_fire_types = c('none', 'all', 'wild', 'prescribed'),
                            display_progress = TRUE) {
 
   checkmate::assert_path_for_output(DB_path)
+
+
 
   checkmate::assert_matrix(tsf_init, mode = "integerish", any.missing = FALSE)
 
@@ -99,6 +102,11 @@ rcafe_simulate <- function(DB_path,
 
   tsf_breaks <- sort(tsf_breaks)
 
+  map_fire_types <- match.arg(map_fire_types)
+
+  map_prescribed <- map_fire_types %in% c('all', 'prescribed')
+  map_wild <- map_fire_types %in% c('all', 'wild')
+
   # Whether to display a progress bar
   checkmate::assert_flag(display_progress)
 
@@ -110,7 +118,7 @@ rcafe_simulate <- function(DB_path,
   cmd <- glue::glue("CREATE TABLE regimes (
                        id INTEGER,
                        regime_type INTEGER,
-                       name VARCHAR(32),
+                       name TEXT,
                        PRIMARY KEY(id)
                      );")
 
@@ -133,6 +141,7 @@ rcafe_simulate <- function(DB_path,
                        time INTEGER,
                        regime_id INTEGER REFERENCES regimes(id),
                        size INTEGER,
+                       raster_filename TEXT,
                        PRIMARY KEY(rep, time, regime_id)
                      );")
 
@@ -163,6 +172,10 @@ rcafe_simulate <- function(DB_path,
     tabulate(ii + 1, nbins = length(tsf_breaks) + 1) / LandscapeNCells
   }
 
+  # Path prefix for file name for fire rasters based on the output DB path
+  FireRasterPrefix <- fs::path_ext_remove(DB_path)
+
+
   ##### Simulation starts here #####
 
   all_times <- c(-rev(seq_len(n_burnin)), seq_len(n_iter))
@@ -171,8 +184,6 @@ rcafe_simulate <- function(DB_path,
     if (n_rep == 1) bar_fmt <- "Time :current :percent [:bar]"
     else bar_fmt <- "Replicate :rep time :current :percent [:bar]"
   }
-
-  iSaveTSF <- 0
 
   for (irep in seq_len(n_rep)) {
     if (display_progress) {
@@ -190,13 +201,38 @@ rcafe_simulate <- function(DB_path,
           fire_res <- doFire(tsf = tsf, regime)
 
           ncells_burnt <- fire_res[["ncells"]]
+
+          fire_raster_path <- ""
+
+          # Fire map (0 = unburnt, 1 = burnt)
+          landscape <- fire_res[["landscape"]]
+
           if (ncells_burnt > 0 && itime > 0) {
-            stmt <- DBI::dbSendStatement(DB, "insert into fires values (?, ?, ?, ?);")
-            DBI::dbBind(stmt, list(irep, itime, iregime, ncells_burnt))
+            do_map <- (regime$regime_type == .REGIME_TYPE_WILDFIRE && map_wild) ||
+              (regime$regime_type == .REGIME_TYPE_PRESCRIBED_FIRE && map_prescribed)
+
+            if (do_map) {
+              fire_raster_path <- sprintf("%s_%s_%04d_%04d.tif",
+                                          FireRasterPrefix,
+                                          regime$name,
+                                          irep,
+                                          itime)
+              # Guard against spaces
+              fire_raster_path <- gsub(fire_raster_path, pattern = "\\s+", replacement = "_")
+
+              r <- terra::rast(landscape)
+              terra::writeRaster(r,
+                                 filename = fire_raster_path,
+                                 overwrite = TRUE,
+                                 datatype = "INT1U",
+                                 gdal = c("COMPRESS=ZSTD", "ZSTD_LEVEL=1", "PREDICTOR=2"))
+            }
+
+            stmt <- DBI::dbSendStatement(DB, "insert into fires values (?, ?, ?, ?, ?);")
+            DBI::dbBind(stmt, list(irep, itime, iregime, ncells_burnt, fire_raster_path))
             DBI::dbClearResult(stmt)
           }
 
-          landscape <- fire_res[["landscape"]]
 
           # Update the TSF matrix for burnt and unburnt cells
           tsf <- tsf + 1

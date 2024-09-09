@@ -17,8 +17,10 @@ Imports:
     checkmate,
     DBI,
     duckdb,
+    fs,
     glue,
-    Rcpp
+    Rcpp,
+    terra
 License: MIT + file LICENSE
 URL: https://github.com/mbedward/RCAFE
 BugReports: https://github.com/mbedward/RCAFE/issues
