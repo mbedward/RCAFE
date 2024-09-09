@@ -10,6 +10,16 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// get_wildfire_type
+int get_wildfire_type();
+RcppExport SEXP _RCAFE_get_wildfire_type() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(get_wildfire_type());
+    return rcpp_result_gen;
+END_RCPP
+}
 // TESTER
 IntegerVector TESTER(int n);
 RcppExport SEXP _RCAFE_TESTER(SEXP nSEXP) {
@@ -22,40 +32,22 @@ BEGIN_RCPP
 END_RCPP
 }
 // doFire
-List doFire(const IntegerMatrix& tsf, const Function fn_prob_tsf, const bool diagonal, const int max_ignition_attempts);
-RcppExport SEXP _RCAFE_doFire(SEXP tsfSEXP, SEXP fn_prob_tsfSEXP, SEXP diagonalSEXP, SEXP max_ignition_attemptsSEXP) {
+List doFire(const IntegerMatrix& tsf, const List& regime);
+RcppExport SEXP _RCAFE_doFire(SEXP tsfSEXP, SEXP regimeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const IntegerMatrix& >::type tsf(tsfSEXP);
-    Rcpp::traits::input_parameter< const Function >::type fn_prob_tsf(fn_prob_tsfSEXP);
-    Rcpp::traits::input_parameter< const bool >::type diagonal(diagonalSEXP);
-    Rcpp::traits::input_parameter< const int >::type max_ignition_attempts(max_ignition_attemptsSEXP);
-    rcpp_result_gen = Rcpp::wrap(doFire(tsf, fn_prob_tsf, diagonal, max_ignition_attempts));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cafeSim
-IntegerMatrix cafeSim(const IntegerMatrix initial_tsf, const int n_times, const Function fn_prob_tsf, const bool diagonal, const int max_ignition_attempts, const bool display_progress);
-RcppExport SEXP _RCAFE_cafeSim(SEXP initial_tsfSEXP, SEXP n_timesSEXP, SEXP fn_prob_tsfSEXP, SEXP diagonalSEXP, SEXP max_ignition_attemptsSEXP, SEXP display_progressSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const IntegerMatrix >::type initial_tsf(initial_tsfSEXP);
-    Rcpp::traits::input_parameter< const int >::type n_times(n_timesSEXP);
-    Rcpp::traits::input_parameter< const Function >::type fn_prob_tsf(fn_prob_tsfSEXP);
-    Rcpp::traits::input_parameter< const bool >::type diagonal(diagonalSEXP);
-    Rcpp::traits::input_parameter< const int >::type max_ignition_attempts(max_ignition_attemptsSEXP);
-    Rcpp::traits::input_parameter< const bool >::type display_progress(display_progressSEXP);
-    rcpp_result_gen = Rcpp::wrap(cafeSim(initial_tsf, n_times, fn_prob_tsf, diagonal, max_ignition_attempts, display_progress));
+    Rcpp::traits::input_parameter< const List& >::type regime(regimeSEXP);
+    rcpp_result_gen = Rcpp::wrap(doFire(tsf, regime));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_RCAFE_get_wildfire_type", (DL_FUNC) &_RCAFE_get_wildfire_type, 0},
     {"_RCAFE_TESTER", (DL_FUNC) &_RCAFE_TESTER, 1},
-    {"_RCAFE_doFire", (DL_FUNC) &_RCAFE_doFire, 4},
-    {"_RCAFE_cafeSim", (DL_FUNC) &_RCAFE_cafeSim, 6},
+    {"_RCAFE_doFire", (DL_FUNC) &_RCAFE_doFire, 2},
     {NULL, NULL, 0}
 };
 

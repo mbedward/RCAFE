@@ -5,6 +5,16 @@ using namespace Rcpp;
 using namespace std;
 
 
+// Constants for regime types
+const int REGIME_TYPE_WILDFIRE = 1;
+const int REGIME_TYPE_PRESCRIBED_FIRE = 2;
+
+// Accessor functions for R to use to set active bindings to the constants
+// [[Rcpp::export]]
+int get_wildfire_type(){ return REGIME_TYPE_WILDFIRE; }
+int get_prescribed_fire_type() { return REGIME_TYPE_PRESCRIBED_FIRE; }
+
+
 int wrap_coord(int x, int n) {
   while (x < 0) x = x + n;
   while (x >= n) x = x - n;
@@ -153,18 +163,7 @@ IntegerVector TESTER(int n) {
 }
 
 
-// Simulate a fire (if ignition is possible) and return a list with elements:
-//   - IntegerMatrix where non-zero values indicate burnt cells
-//   - number of cells burnt
-//   - index of first ignition cell
-//
-//' @export
-// [[Rcpp::export]]
-List doFire(const IntegerMatrix& tsf,
-            const Function fn_prob_tsf,
-            const bool diagonal = false,
-            const int max_ignition_attempts = 10) {
-
+List do_wildfire(const IntegerMatrix& tsf, const List& regime) {
   // Constants for cell state
   const int UNBURNT = 0;
   const int BURNING = 1;
@@ -176,6 +175,11 @@ List doFire(const IntegerMatrix& tsf,
   // Matrix to hold cell fire state (implicitly filled with 0 = UNBURNT)
   IntegerMatrix landscape(n_rows, n_cols);
   int n_cells_burnt = 0;
+
+  // Regime parameters
+  Function fn_prob_tsf = regime["fn_prob_tsf"];
+  int max_ignition_attempts = regime["max_ignition_attempts"];
+  bool diagonal = regime["diagonal"];
 
   // Attempt to ignite a randomly selected cell
   int ignition_index = -1;
@@ -237,41 +241,69 @@ List doFire(const IntegerMatrix& tsf,
 }
 
 
-//' @export
-// [[Rcpp::export]]
-IntegerMatrix cafeSim(const IntegerMatrix initial_tsf,
-                      const int n_times,
-                      const Function fn_prob_tsf,
-                      const bool diagonal = false,
-                      const int max_ignition_attempts = 10,
-                      const bool display_progress = true) {
+List do_prescribed_fire(const IntegerMatrix& tsf, const List& regime) {
+  // Constants for cell state
+  const int UNBURNT = 0;
+  const int BURNING = 1;
 
-  IntegerMatrix tsf = clone(initial_tsf);
+  // Landscape size
+  const int n_rows = tsf.rows();
+  const int n_cols = tsf.cols();
 
-  double progress_time_step = n_times / 10;
-  int last_progress_time = 0;
+  // Matrix to hold cell fire state (implicitly filled with 0 = UNBURNT)
+  IntegerMatrix landscape(n_rows, n_cols);
+  int n_cells_burnt = 0;
 
-  for (int itime = 0; itime < n_times; itime++) {
-    if (display_progress) {
-      if (itime - last_progress_time > progress_time_step) {
-        last_progress_time = itime;
-        printf("=");
-      }
-    }
+  // Regime parameters
+  Function fn_prob_tsf = regime["fn_prob_tsf"];
+  double target_prop_landscape = regime["prop_landscape"];
+  int target_num_cells = round(target_prop_landscape * n_rows * n_cols);
 
-    List fire_results = doFire(tsf, fn_prob_tsf, diagonal, max_ignition_attempts);
-    IntegerMatrix landscape = fire_results["landscape"];
+  // Candidate cell indices (zero-based)
+  IntegerVector cell_indices( Rcpp::sample(n_rows * n_cols, target_num_cells, false, R_NilValue, false) );
 
-    // Update TSF for burnt and unburnt cells
-    for (int index = 0; index < tsf.size(); index++) {
-      if (landscape[index] > 0) tsf[index] = 0;
-      else tsf[index] = tsf[index] + 1;
+  for (int i = 0; i < target_num_cells; i++) {
+    int cell_index = cell_indices(i);
+    double prob_burn = Rcpp::as<double>( fn_prob_tsf( tsf[cell_index] ) );
+    double p = R::runif(0, 1);
+
+    if (p < prob_burn) {
+      landscape[cell_index] = BURNING;
+      n_cells_burnt++ ;
     }
   }
 
-  if (display_progress) printf("\n");
-
-  return tsf;
+  return List::create(Named("landscape") = landscape,
+                      Named("ncells") = n_cells_burnt);
 }
 
 
+// Simulate a fire (if ignition is possible) and return a list with elements:
+//   - IntegerMatrix where non-zero values indicate burnt cells
+//   - number of cells burnt
+//   - index of first ignition cell
+//
+//' @export
+// [[Rcpp::export]]
+List doFire(const IntegerMatrix& tsf, const List& regime) {
+  // Get the fire regime parameters
+  int regime_type = regime["regime_type"];  // 1 is wildfire, 2 is prescribed fire
+  if (regime_type < 1 || regime_type > 2) stop("Unknown regime type constant: %d", regime_type);
+
+  String regime_name = regime["name"];
+
+  List fire_res = NULL;
+
+  if (regime_type == REGIME_TYPE_WILDFIRE) {
+    fire_res = do_wildfire(tsf, regime);
+
+  } else if (regime_type == REGIME_TYPE_PRESCRIBED_FIRE) {
+    fire_res = do_prescribed_fire(tsf, regime);
+
+  } else {
+    // shouldn't be here because of earlier check, but just in case...
+    stop("Unknown regime type constant %d", regime_type);
+  }
+
+  return fire_res;
+}
