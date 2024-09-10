@@ -1,8 +1,8 @@
 Package: RCAFE
 Type: Package
 Title: CAFE: Cellular Analysis of Fire and Extinction
-Version: 0.1.4
-Date: 2024-09-09
+Version: 0.1.5
+Date: 2024-09-10
 Authors@R: c(
   person("Michael", "Bedward", role = c("aut", "cre"), email = "michael.bedward@gmail.com"),
   person("Ross", "Bradstock", role = "aut", email = "rbradstock@uow.edu.au")

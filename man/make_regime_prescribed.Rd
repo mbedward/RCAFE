@@ -2,10 +2,46 @@
 % Please edit documentation in R/fire_regimes.R
 \name{make_regime_prescribed}
 \alias{make_regime_prescribed}
-\title{Define a prescribed fire regime with random cell selection}
+\title{Define a prescribed fire regime.}
 \usage{
-make_regime_prescribed(name, fn_prob_tsf, fn_occur, prop_landscape)
+make_regime_prescribed(
+  name,
+  fn_prob_tsf,
+  fn_occur,
+  prop_landscape,
+  replace = FALSE
+)
+}
+\arguments{
+\item{name}{(character) The regime name to use in the simulation outputs. It
+is best to avoid having any spaces in the name.}
+
+\item{fn_prob_tsf}{A function that takes a single numeric argument for time
+since fire and returns a probability value.}
+
+\item{fn_occur}{A function that takes a single integer argument for
+simulation time step and returns a logical value indicating whether a fire
+based on this regime should be simulated. Note that when a burn-in period
+is specified for a simulation (via the \code{n_burnin} argument to
+\code{\link{rcafe_simulate}}) the burn-in time step values are negative
+integers, while the main simulation time step values are positive integers.
+You can take advantage of this to specify that a fire regime only operates
+during the burn-in period (e.g. \code{fn_occur = function(x) x < 0}); or
+that it only operates during the main simulation period (e.g.
+\code{fn_occur = function(x) x > 0}).}
+
+\item{prop_landscape}{A single numeric value between 0 and 1 specifying what
+proportion of landscape cells to attempt to burn. Cells are randomly
+selected.}
+
+\item{replace}{(logical) Controls whether cells that fail to ignite are
+replaced by other candidates. The default behaviour (\code{replace=FALSE})
+is to simply test each cell in the randomly selected set without
+replacement. If \code{replace=TRUE}, any cell that fails to ignite is
+replaced by selecting a new, untested landscape cell at random making it
+more likely that the specified proportion of the landscape will be burnt.}
 }
 \description{
-Define a prescribed fire regime with random cell selection
+A prescribed fire is simulated by randomly selecting a specified proportion
+of cells from the landscape and testing each for ignition.
 }

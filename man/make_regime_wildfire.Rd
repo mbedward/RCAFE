@@ -9,8 +9,49 @@ make_regime_wildfire(
   fn_prob_tsf,
   fn_occur,
   diagonal = FALSE,
+  single_test = TRUE,
   max_ignition_attempts = 1
 )
+}
+\arguments{
+\item{name}{(character) The regime name to use in the simulation outputs. It
+is best to avoid having any spaces in the name.}
+
+\item{fn_prob_tsf}{A function that takes a single numeric argument for time
+since fire and returns a probability value.}
+
+\item{fn_occur}{A function that takes a single integer argument for
+simulation time step and returns a logical value indicating whether a fire
+based on this regime should be simulated. Note that when a burn-in period
+is specified for a simulation (via the \code{n_burnin} argument to
+\code{\link{rcafe_simulate}}) the burn-in time step values are negative
+integers, while the main simulation time step values are positive integers.
+You can take advantage of this to specify that a fire regime only operates
+during the burn-in period (e.g. \code{fn_occur = function(x) x < 0}); or
+that it only operates during the main simulation period (e.g.
+\code{fn_occur = function(x) x > 0}).}
+
+\item{diagonal}{(logical; default \code{FALSE}) Whether fire can spread from
+a burning cell to its diagonal neighbours. By default, only orthogonal
+neighbours are considered.}
+
+\item{single_test}{(logical) If \code{TRUE} (the default), a cell that
+neighbours currently burning cells will only be tested for ignition once.
+If the cell does not ignite it will be marked as unavailable for future
+spread iterations of the current fire. If \code{FALSE}, a cell that does
+not ignite when tested will still be removed from the list of candidate
+cells for fire spread, but may be added again later if one of its other
+neighbours ignites. The effect of such multiple testing is to elevate the
+probability of cell ignition beyond the base rate calculated by
+\code{fn_prob_tsf}.}
+
+\item{max_ignition_attempts}{(single positive integer) Specifies the maximum
+number of cells to test for ignition when attempting to start a wildfire.
+The default of 1 means that if the initially selected cell fails to ignite,
+no fire occurs.}
+}
+\value{
+A list object with named elements and class \code{CAFEregime}.
 }
 \description{
 Define a wildfire regime

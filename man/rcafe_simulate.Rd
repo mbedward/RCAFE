@@ -63,6 +63,10 @@ save fire maps). Can be abbreviated (e.g. \code{map_fire_types = 'w'}).}
 
 \item{display_progress}{(logical) Whether to display a progress bar.}
 }
+\value{
+(invisibly) The path to the output database as provided via the
+  \code{DB_path} argument.
+}
 \description{
 Run an RCAFE simulation
 }
@@ -81,10 +85,23 @@ curve(fn_prob(x), from=0, to=40,
 # of 20 years
 tsf0 <- matrix(20, nrow=100, ncol=100)
 
-# Run the simulation for 500 years after an initial 100 year
+# Path for the output DuckDB database file
+dbpath <- "test_sim.duckdb"
+
+# Regime definition for a wildfire that (possibly) burns every 5th year of
+# the simulation
+regime_wild <- make_regime_wildfire("wildfire",
+                                    fn_prob,
+                                    fn_occur = function(x) {x \%\% 5 == 0})
+
+# Run the simulation for a single replicate of 500 years after an initial 100 year
 # burn-in period
-res <- rcafe_simulate(tsf0, n_iter=500, n_burnin=100,
-                      fn_prob_tsf = fn_prob)
+res <- rcafe_simulate(dbpath,
+                      tsf_init = tsf0,
+                      regimes = list(regime_wild),
+                      n_rep = 1,
+                      n_iter = 500,
+                      n_burnin = 100)
 }
 
 }

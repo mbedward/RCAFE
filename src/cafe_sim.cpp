@@ -167,6 +167,7 @@ List do_wildfire(const IntegerMatrix& tsf, const List& regime) {
   // Constants for cell state
   const int UNBURNT = 0;
   const int BURNING = 1;
+  const int UNAVAILABLE = -1;
 
   // Landscape size
   const int n_rows = tsf.rows();
@@ -180,6 +181,7 @@ List do_wildfire(const IntegerMatrix& tsf, const List& regime) {
   Function fn_prob_tsf = regime["fn_prob_tsf"];
   int max_ignition_attempts = regime["max_ignition_attempts"];
   bool diagonal = regime["diagonal"];
+  bool single_test = regime["single_test"];
 
   // Attempt to ignite a randomly selected cell
   int ignition_index = -1;
@@ -226,12 +228,26 @@ List do_wildfire(const IntegerMatrix& tsf, const List& regime) {
         landscape[spread_index] = BURNING;
         n_cells_burnt++ ;
 
+        // Add available unburnt neighbours to the spread list
         std::vector<int> nbrs = get_neighbour_indices(spread_index, n_rows, n_cols, diagonal, false);
 
         for (std::vector<int>::iterator itnbr = nbrs.begin(); itnbr != nbrs.end(); ++itnbr) {
           if (landscape[*itnbr] == UNBURNT) spreadcells.insert(*itnbr);
         }
+
+      } else {
+        // Cell failed to burn
+        if (single_test) {
+          // Mark cell as unavailable for future fire spread steps, i.e. it cannot be placed
+          // back on the spread list if another neighbouring cell burns later
+          landscape[spread_index] = UNAVAILABLE;
+        }
       }
+    }
+
+    // Reset any UNAVAILABLE cells to UNBURNT
+    for (IntegerMatrix::iterator it_land = landscape.begin(); it_land != landscape.end(); ++it_land) {
+      if (*it_land == UNAVAILABLE) *it_land = UNBURNT;
     }
   }
 
@@ -252,23 +268,65 @@ List do_prescribed_fire(const IntegerMatrix& tsf, const List& regime) {
 
   // Matrix to hold cell fire state (implicitly filled with 0 = UNBURNT)
   IntegerMatrix landscape(n_rows, n_cols);
-  int n_cells_burnt = 0;
+  IntegerMatrix::iterator it_landscape;
 
   // Regime parameters
   Function fn_prob_tsf = regime["fn_prob_tsf"];
   double target_prop_landscape = regime["prop_landscape"];
-  int target_num_cells = round(target_prop_landscape * n_rows * n_cols);
 
-  // Candidate cell indices (zero-based)
-  IntegerVector cell_indices( Rcpp::sample(n_rows * n_cols, target_num_cells, false, R_NilValue, false) );
+  if (target_prop_landscape < 0 || target_prop_landscape > 1) stop("Invalid landscape proportion value: %g", target_prop_landscape);
 
-  for (int i = 0; i < target_num_cells; i++) {
-    int cell_index = cell_indices(i);
-    double prob_burn = Rcpp::as<double>( fn_prob_tsf( tsf[cell_index] ) );
+  unsigned int target_num_cells = round(target_prop_landscape * n_rows * n_cols);
+  bool replace_cells = regime["replace"];
+
+  unsigned int n_cells_burnt = 0;
+
+  std::set<int>::iterator it_candidate;
+
+  // Indices (zero-based) of candidate cells to test
+  // Note: at present we are dealing with featureless landscapes where all cells are potentially
+  // available but this could change later (e.g. unburnable barrier cells) hence this loop...
+  //
+  set<int> candidate_indices;
+  int index = 0;
+  for (it_landscape = landscape.begin(); it_landscape != landscape.end(); ++it_landscape, index++) {
+    if (*it_landscape == UNBURNT) candidate_indices.insert(index);
+  }
+
+  if (candidate_indices.empty()) {
+    // Bummer - no cells available to burn
+  }
+
+  if (!replace_cells) {
+    // We are NOT doing replacement of cells that fail to burn when tested
+    // so randomly reduce the set of candidate cells (if necessary) to the
+    // target number
+    //
+    while (candidate_indices.size() > target_num_cells) {
+      it_candidate = candidate_indices.begin();
+      int k = floor(R::runif(0, candidate_indices.size()));
+
+      for (; k > 0; k--) it_candidate++ ;
+      candidate_indices.erase(*it_candidate);
+    }
+  }
+
+  while (n_cells_burnt < target_num_cells && !candidate_indices.empty()) {
+    // Randomly select a candidate cell and remove its index from the
+    // candidate set
+    it_candidate = candidate_indices.begin();
+    int k = floor(R::runif(0, candidate_indices.size()));
+    for (; k > 0; k--) it_candidate++ ;
+
+    int candidate_index = *it_candidate;
+    candidate_indices.erase(*it_candidate);
+
+    // Attempt to burn the cell
+    double prob_burn = Rcpp::as<double>( fn_prob_tsf( tsf[candidate_index] ) );
     double p = R::runif(0, 1);
 
     if (p < prob_burn) {
-      landscape[cell_index] = BURNING;
+      landscape[candidate_index] = BURNING;
       n_cells_burnt++ ;
     }
   }
