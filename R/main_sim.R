@@ -130,7 +130,7 @@ rcafe_simulate <- function(DB_path,
   # Database connection for outputs (NOTE: PRESENTLY MUST BE A FILE)
   DB <- DBI::dbConnect(drv = duckdb::duckdb(dbdir = DB_path))
 
-  # Create table for fire regimes
+  ##### Create database table for fire regimes
   cmd <- glue::glue("CREATE TABLE regimes (
                        id INTEGER,
                        regime_type INTEGER,
@@ -150,20 +150,28 @@ rcafe_simulate <- function(DB_path,
 
   DBI::dbWriteTable(DB, name = "regimes", value = dat, append = TRUE)
 
-
-  # Create database table for fire statistics
+  ##### Create database table for fire statistics
   cmd <- glue::glue("create table fires (
                        rep INTEGER,
                        time INTEGER,
                        regime_id INTEGER REFERENCES regimes(id),
                        size INTEGER,
-                       raster_filename TEXT,
                        PRIMARY KEY(rep, time, regime_id)
                      );")
 
   DBI::dbExecute(DB, cmd)
 
-  # Create database table for TSF interval monitoring
+  ##### Create database table for the paths to the optional fire map raster files
+  cmd <- glue::glue("CREATE TABLE firemaps (
+                       rep INTEGER,
+                       regime_id INTEGER REFERENCES regimes(id),
+                       raster_path TEXT,
+                       PRIMARY KEY(rep, regime_id)
+                     );")
+
+  DBI::dbExecute(DB, cmd)
+
+  ##### Create database table for TSF interval monitoring
   s <- sprintf("tsf_leq_%g DOUBLE", tsf_breaks)
   s <- c(s, sprintf("tsf_gt_%g DOUBLE", tail(tsf_breaks, 1)))
   TSF_colnames <- paste(s, collapse = ", ")
@@ -209,56 +217,53 @@ rcafe_simulate <- function(DB_path,
 
     tsf = tsf_init
 
-    for (itime in all_times) {
-      for (iregime in seq_along(regimes)) {
+    res_replicate <- lapply(all_times, function(itime) {
+      #
+      # Simulate each regime
+      #
+      res_regimes <- lapply(seq_along(regimes), function(iregime) {
         regime <- regimes[[iregime]]
+        res_cur_regime <- NULL
 
         if (regime$fn_occur(itime)) {
           fire_res <- doFire(tsf = tsf, regime)
 
-          ncells_burnt <- fire_res[["ncells"]]
-
-          fire_raster_path <- ""
-
           # Fire map (0 = unburnt, 1 = burnt)
-          landscape <- fire_res[["landscape"]]
-
-          if (ncells_burnt > 0 && itime > 0) {
-            do_map <- (regime$regime_type == .REGIME_TYPE_WILDFIRE && map_wild) ||
-              (regime$regime_type == .REGIME_TYPE_PRESCRIBED_FIRE && map_prescribed)
-
-            if (do_map) {
-              fire_raster_path <- sprintf("%s_%s_%04d_%04d.tif",
-                                          FireRasterPrefix,
-                                          regime$name,
-                                          irep,
-                                          itime)
-              # Guard against spaces
-              fire_raster_path <- gsub(fire_raster_path, pattern = "\\s+", replacement = "_")
-
-              r <- terra::rast(landscape)
-              terra::writeRaster(r,
-                                 filename = fire_raster_path,
-                                 overwrite = TRUE,
-                                 datatype = "INT1U",
-                                 gdal = c("COMPRESS=ZSTD", "ZSTD_LEVEL=1", "PREDICTOR=2"))
-            }
-
-            stmt <- DBI::dbSendStatement(DB, "insert into fires values (?, ?, ?, ?, ?);")
-            DBI::dbBind(stmt, list(irep, itime, iregime, ncells_burnt, fire_raster_path))
-            DBI::dbClearResult(stmt)
-          }
-
+          fire_footprint <- fire_res[["landscape"]]
 
           # Update the TSF matrix for burnt and unburnt cells
-          tsf <- tsf + 1
+          tsf <<- tsf + 1
 
           # Set burnt cells to zero TSF
-          tsf[ which(landscape > 0) ] <- 0
-        }
-      }
+          tsf[ which(fire_footprint > 0) ] <<- 0
 
-      # Record TSF landscape proportions
+          # If there was a fire, and we are in the main simulation (after any burn-in phase)
+          # record the fire summary and create a fire raster if requested
+          #
+          ncells_burnt <- fire_res[["ncells"]]
+
+          if (ncells_burnt > 0 && itime > 0) {
+            stmt <- DBI::dbSendStatement(DB, "insert into fires values (?, ?, ?, ?);")
+            DBI::dbBind(stmt, list(irep, itime, iregime, ncells_burnt))
+            DBI::dbClearResult(stmt)
+
+            do_map <- (
+              (regime$regime_type == .REGIME_TYPE_WILDFIRE && map_wild) ||
+              (regime$regime_type == .REGIME_TYPE_PRESCRIBED_FIRE && map_prescribed)
+            )
+
+            if (do_map) {
+              r <- terra::rast(fire_footprint)
+              res_cur_regime <- list(rep = irep, time = itime, regime_index = iregime, layer = r)
+            }
+          }
+        }
+
+        # Return the regime map (or NULL if there isn't one)
+        res_cur_regime
+      })
+
+      # Record TSF landscape proportions after all fires have been simulated for this year
       if (itime > 0) {
         if (display_progress) {
           tokens <- list()
@@ -273,6 +278,49 @@ rcafe_simulate <- function(DB_path,
         DBI::dbBind(stmt, vals)
         DBI::dbClearResult(stmt)
       }
+
+      # Return list of regime result objects with fire maps (or NULLs if no maps were created)
+      res_regimes
+    })
+
+    # Flatten the list of fire layers from regimes-within-time and write
+    # rasters for each regime to a GeoTIFF file
+    #
+    res_all <- .flatten_list(res_replicate)
+
+    for (iregime in seq_along(regimes)) {
+      regime_name <- regimes[[iregime]]$name
+
+      rlayers <- lapply(res_all, function(res) {
+        if (!is.null(res) && res$regime_index == iregime) res$layer
+      })
+      rlayers <- base::Filter(.is_not_null, rlayers)
+
+      times <- sapply(res_all, function(res) {
+        if (!is.null(res) && res$regime_index == iregime) res$time
+      })
+      times <- unlist(times) # convert to vector and implicitly remove any NULLs
+
+      if (length(rlayers) > 0) {
+        regime_raster <- terra::rast(rlayers)
+        names(regime_raster) <- sprintf("time%06d", times)
+
+        out_path <- sprintf("%s_%s_%06d.tif",
+                            FireRasterPrefix,
+                            regime_name,
+                            irep)
+
+        terra::writeRaster(regime_raster,
+                           filename = out_path,
+                           overwrite = TRUE,
+                           datatype = "INT1U",
+                           gdal = c("COMPRESS=ZSTD", "ZSTD_LEVEL=1", "PREDICTOR=2"))
+
+        # Store raster path in output database
+        stmt <- DBI::dbSendStatement(DB, "insert into firemaps values (?, ?, ?);")
+        DBI::dbBind(stmt, list(irep, iregime, out_path))
+        DBI::dbClearResult(stmt)
+      }
     }
   }
 
@@ -281,4 +329,15 @@ rcafe_simulate <- function(DB_path,
 
   invisible(DB_path)
 }
+
+
+# Private helper function to flatten a nested list
+#
+# See https://stackoverflow.com/a/77492151/40246
+#
+.flatten_list <- function(x, flatf = c) x |> Reduce (\(a,b) flatf(a,b) , x = _)
+
+
+# Private helper function to test if a value is not NULL
+.is_not_null <- function(x) !is.null(x)
 
