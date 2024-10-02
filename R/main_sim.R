@@ -130,6 +130,19 @@ rcafe_simulate <- function(DB_path,
   # Database connection for outputs (NOTE: PRESENTLY MUST BE A FILE)
   DB <- DBI::dbConnect(drv = duckdb::duckdb(dbdir = DB_path))
 
+  ##### Create database table for overall simulation parameters (single record)
+  cmd <- glue::glue("CREATE TABLE simulation (
+                       num_replicates INTEGER CHECK (num_replicates > 0),
+                       num_iter INTEGER CHECK (num_iter > 0),
+                       num_burnin INTEGER CHECK (num_burnin >= 0)
+                     );")
+
+  DBI::dbExecute(DB, cmd)
+
+  cmd <- glue::glue("INSERT INTO simulation (num_replicates, num_iter, num_burnin) VALUES ({n_rep}, {n_iter}, {n_burnin});")
+
+  DBI::dbExecute(DB, cmd)
+
   ##### Create database table for fire regimes
   cmd <- glue::glue("CREATE TABLE regimes (
                        id INTEGER,

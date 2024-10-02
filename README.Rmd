@@ -33,89 +33,111 @@ To install on a Windows system you will need to have [Rtools](https://cran.r-pro
 
 ## Examples
 
-```{r example}
+Note: this example code is a bit quick and dirty as the package is still in its early days!
+
+```{r example_simulation}
+
 library(RCAFE)
 library(terra)
 library(progress)
 
-# Create a matrix of random time since fire values (implicitly treated as years).
-# The matrix dimensions will also define the simulation landscape.
-sidelen <- 200
-MinTSF <- 0
-MaxTSF <- 10
+# Create a matrix of constant time since fire values (implicitly treated as
+# years). The matrix dimensions will also define the simulation landscape.
+sidelen <- 100
 
-tsf <- matrix(as.integer(sample(MinTSF:MaxTSF, size = sidelen*sidelen, replace = TRUE)), 
-              sidelen, sidelen)
+tsf <- matrix(20L, sidelen, sidelen)
 
-plot(rast(tsf))
+# Define two fire regimes: annual prescribed fire and wildfire
 
-# A function to relate the probability of fire in a cell to the
-# time since fire
-fn_prob <- function(tsf) {
-  1 / (1 + exp(2.5 - 0.37*tsf))
-}
+##### Prescribed fire: attempt to burn 10% of the landscape each year
+pb <- make_regime_prescribed(
+  name = "pb", 
+  fn_prob_tsf = function(tsf) { 1 / (1 + exp(1 - 0.6*tsf)) }, 
+  fn_occur = function(time) { time > 0 }, 
+  prop_landscape = 0.1, 
+  replace = TRUE)
 
-curve(fn_prob(x), from = 0, to = 40, ylim = c(0, 1), 
-      xlab = "Time since fire", ylab = "Probability of cell ignition")
+##### Wildfire: attempted ignition every 3 years on average
+wf <- make_regime_wildfire(
+  name = "wf", 
+  fn_prob_tsf = function(tsf) { 1 / (1 + exp(3 - 0.8*tsf)) }, 
+  fn_occur = function(time) { runif(1) < 1/3 } )
 
-
-# Simulate fires for an intial period to evolve spatial structure in the 
-# pattern of time since fire
-Nburn_in <- 400
-pb <- progress_bar$new(total = Nburn_in)
-
-for (i in 1:Nburn_in) {
-  pb$tick()
-
-  res <- RCAFE:::doFire(tsf, fn_prob)
-
-  # Update the TSF matrix based on the fire map returned by
-  # the doFire function
-  tsf <- tsf + 1
-  tsf[res$landscape > 0] <- 0  # Burnt cells
-}
-
-# View the resulting TSF pattern
-plot(rast(tsf))
-
-# Simulate a few more fires and plot them to get some idea of
-# the general patterns. We will only plot fires that burnt at least
-# 5% of the landscape.
-min_landscape_prop <- 0.05
-
-Nfires <- 6
-rr <- lapply(1:Nfires, function(...) {
-  tsfx <- tsf
-  while (TRUE) {
-    res <- RCAFE:::doFire(tsf = tsfx, fn_prob)
-
-    tsfx <- tsfx + 1
-    tsfx[res$landscape > 0] <- 0
-
-    if (res$ncells > sidelen*sidelen*min_landscape_prop) break
-  }
-  rast(res$landscape)
-})
-
-rr <- rast(rr)
-plot(rr, legend = FALSE, main = "")
-
-
-# Run the simulation function for a set of 50 year batches and view the
-# time since fire pattern at the end of each batch
+# Run the simulation for 10 replicates of 200 years with a 100 year adaptation
+# period in which only wildfires occur (to evolve some spatial structure in the
+# pattern of time since fire). 
 #
-Nbatches <- 6
-Nyears <- 50
+# This will take several minutes
+#
+rcafe_simulate(DB_path = "test_run.duckdb", 
+               tsf_init = tsf, 
+               regimes = list(pb, wf), 
+               n_rep = 1, 
+               n_iter = 200, 
+               n_burnin = 100, 
+               map_fire_types = "all")
+               
+```
 
-rr <- lapply(1:Nbatches, function(i) {
-  tsf <<- RCAFE:::cafeSim(initial_tsf = tsf, n_times = Nyears, fn_prob_tsf = fn_prob)
-  rast(tsf)
-})
 
-rr <- rast(rr)
-names(rr) <- sprintf("%d years", seq_len(Nbatches) * Nyears)
-plot(rr)
+Simulation results are written to an output DuckDB database.
+
+```{r open_db}
+
+db <- DBI::dbConnect(duckdb::duckdb("test_run.duckdb"))
+
+DBI::dbListTables(db)
 
 ```
 
+The regimes table presently stores just the name and type (1=wildfire, 2=prescribed fire) of each regime.
+
+```{r get_regimes}
+
+DBI::dbGetQuery(db, "select * from regimes;")
+
+```
+
+The fires table stores the time, type and extent of each fire.
+
+```{r get_fire_summary}
+
+DBI::dbGetQuery(db, "select f.rep, f.time, r.name as regime_name, f.size 
+                from fires f join regimes r on f.regime_id = r.id 
+                limit 10;")
+
+```
+
+
+The firemaps table stores the paths to raster fire maps. The maps are stored in GeoTIFF files, with one file for each simulation replicate X fire regime. Fires are stored as separate layers in each file (one fire per simulation year) with layer names of the form: time000001, time000005 etc.
+
+```{r get_firemap_paths}
+
+DBI::dbGetQuery(db, "select * from firemaps where rep=1;")
+
+```
+
+
+```{r get_firemaps}
+
+library(terra)
+
+dat <- DBI::dbGetQuery(db, "select raster_path from firemaps where rep=1 and regime_id=2;")
+
+r_wf <- rast(dat$raster_path)
+
+dat_levels <- data.frame(id = 0:1, state = c("unburnt", "burnt"))
+levels(r_wf) <- lapply(1:nlyr(r_wf), function(...) dat_levels)
+
+```
+
+View a few fire maps...
+
+```{r view_firemaps}
+
+par(mfrow = c(2, 3))
+
+plot(r_wf, 1:6, main="", legend = FALSE)
+
+```
 
